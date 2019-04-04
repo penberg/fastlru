@@ -46,8 +46,15 @@ func (c *Cache) Get(key interface{}) (value interface{}, ok bool) {
 		if timestamp.After(timestamp.Add(time.Second * 1)) {
 			c.lock.RUnlock()
 			c.lock.Lock()
-			c.evict.MoveToFront(elem)
-			c.lock.Unlock()
+			defer c.lock.Unlock()
+			// We dropped the lock so we need to perform the lookup again.
+			if elem, ok := c.items[key]; ok {
+				ent := elem.Value.(*entry)
+				ent.timestamp = timestamp
+				c.evict.MoveToFront(elem)
+			} else {
+				return nil, false
+			}
 		} else {
 			c.lock.RUnlock()
 		}
