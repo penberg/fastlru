@@ -43,7 +43,7 @@ func (c *Cache) Get(key interface{}) (value interface{}, ok bool) {
 	c.lock.RLock()
 	if elem, ok := c.items[key]; ok {
 		ent := elem.Value.(*entry)
-		if timestamp.After(timestamp.Add(time.Second * 1)) {
+		if timestamp.After(ent.timestamp.Add(time.Second * 1)) {
 			c.lock.RUnlock()
 			c.lock.Lock()
 			defer c.lock.Unlock()
