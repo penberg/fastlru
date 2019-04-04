@@ -3,6 +3,7 @@ package lru
 import (
 	"container/list"
 	"sync"
+	"time"
 )
 
 type Cache struct {
@@ -14,6 +15,7 @@ type Cache struct {
 type entry struct {
 	key   interface{}
 	value interface{}
+	timestamp time.Time
 }
 
 func NewCache() *Cache {
@@ -26,20 +28,30 @@ func NewCache() *Cache {
 func (c *Cache) Add(key, value interface{}) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	if _, ok := c.items[key]; ok {
+	if elem, ok := c.items[key]; ok {
+		c.evict.MoveToFront(elem)
 		return
 	}
-	item := &entry{key, value}
-	elem := c.evict.PushFront(item)
+	timestamp := time.Now()
+	ent := &entry{key, value, timestamp}
+	elem := c.evict.PushFront(ent)
 	c.items[key] = elem
 }
 
 func (c *Cache) Get(key interface{}) (value interface{}, ok bool) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
+	timestamp := time.Now()
+	c.lock.RLock()
 	if elem, ok := c.items[key]; ok {
-		c.evict.MoveToFront(elem)
-		return elem.Value.(*entry).value, true
+		ent := elem.Value.(*entry)
+		if timestamp.After(timestamp.Add(time.Second * 1)) {
+			c.lock.RUnlock()
+			c.lock.Lock()
+			c.evict.MoveToFront(elem)
+			c.lock.Unlock()
+		} else {
+			c.lock.RUnlock()
+		}
+		return ent.value, true
 	}
 	return
 }
